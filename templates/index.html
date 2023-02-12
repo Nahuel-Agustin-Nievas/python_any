@@ -1,0 +1,67 @@
+{% extends "layout.html" %}
+
+
+{% block body %}
+
+
+<h2 class="title" >POSTS GENERALES</h2>
+{% for post in posts if post.is_deleted == False %}
+<section>
+
+    <div class="parent">
+        <div class="div3">
+
+            <h3 class="post-title"> {{ post.title }}</h3>
+
+            <p class="date">Publicado en: {{ post.date.strftime('%d/%m/%Y %H:%M') }}</p>
+            <p>{{ post.text }}</p>
+            <p class="author">Autor: {{ post.author.username }}</p>
+        </div>
+
+
+        <div class="div2">
+
+            <div class="container-button">
+                {% for post_file in post_files %}
+                    {% if post_file.post_id == post.id and post_file.file_type in ['JPG', 'JPEG', 'PNG'] %}
+                        <form action="{{ url_for('download_file', upload_id=post.id, filename=post_file.filename) }}" method="post">
+                            <button type="submit" class="img-button">
+                                <img src="{{url_for('image', id=post_file.id)}}" name="post_file_id" alt="{{ post_file.filename }}" class="thumbnail">
+                            </button>
+                        </form>
+                    {% endif %}
+                {% endfor %}
+                {% for post_file in post_files %}
+                    {% if post_file.post_id == post.id and post_file.file_type not in ['JPG', 'JPEG', 'PNG'] %}
+                        <button value="{{post_file.filename }}" name="post_file_id" class="download-button">{{ post_file.filename | truncate(11) }}</button>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        <div class="div1">  
+
+            <div class="container-button1">
+                {% if current_user.id == post.author.id %}
+                <form class="delete-button" action=" {{ url_for('delete') }}" method="post">
+
+                    <button value="{{post.id}}" name="post_id" class="delete"><span class="text">Archivar</span>
+                        <span class="icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                                <path
+                                    d="M24 20.188l-8.315-8.209 8.2-8.282-3.697-3.697-8.212 8.318-8.31-8.203-3.666 3.666 8.321 8.24-8.206 8.313 3.666 3.666 8.237-8.318 8.285 8.203z">
+                                </path>
+                            </svg>
+                        </span>
+                    </button>
+
+
+
+
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endfor %}
+{% endblock %}

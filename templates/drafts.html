@@ -1,0 +1,55 @@
+{% extends "layout.html" %}
+
+
+{% block body %}
+
+<h2 class="title" >Borradores</h2>
+
+
+{% for post in drafts %}
+
+<div class="edit-form" >
+    <form action="{{ url_for('post_action', post_id=post.id) }}" method="POST" enctype="multipart/form-data" >
+        <h3>Editar Título</h3>
+        <input type="text" name="title" id="title" value="{{ post.title }}" required>
+        <h3>Editar Texto</h3>
+        <textarea type="text" name="text" id="text" cols="30" rows="10" value="{{ post.text }}"  class="text-area" >{{ post.text }} </textarea>
+        
+        <div class="two-button">
+        <button type="submit" name="action" value="edit"  class="save-button" >Guardar Cambios</button>
+        <button type="submit" name="action" value="publish" class="publish-button" >Publicar</button>
+         </div>
+        <div id="file-inputs"></div>
+        <button id="add-file-button" class="add-file-button" type="button">Agregar archivo</button>
+    </form>
+    {% for post_file in post_files %}
+    {% if post_file.post_id == post.id %}
+    <form class="delete-button" action="{{ url_for('download_file', upload_id=post.id, filename=post_file.filename) }}" method="post">  
+     <button value="{{post_file.filename}}" name="post_file_id"  class="files-button1" > {{ post_file.filename }} </button> 
+    </form>
+    <form class="delete-button" action=" {{ url_for('delete_file') }}" method="post">
+        <button value="{{post_file.id}}" name="file_id" class="files-button2" >Eliminar archivo</button>
+    </form>
+
+    
+
+    {% endif %}
+    {% endfor %}
+</div>
+<!-- <script src="{{url_for('static', filename='app.js')}}"></script> -->
+
+{% endfor %}
+
+
+       {% if error_message %}
+        <div class="error-message2">{{ error_message }}
+
+            <a href="javascript:history.back()" class="btn">Volver</a>
+        </div>
+       
+
+         {% endif %}
+
+
+{% endblock %} 
+
