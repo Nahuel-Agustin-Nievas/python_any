@@ -41,6 +41,7 @@
         <div class="div1">  
 
             <div class="container-button1">
+                {% if current_user is defined %}
                 {% if current_user.id == post.author.id %}
                 <form class="delete-button" action=" {{ url_for('delete') }}" method="post">
 
@@ -58,6 +59,8 @@
 
                 </form>
                 {% endif %}
+                {% endif %}
+
             </div>
         </div>
     </div>

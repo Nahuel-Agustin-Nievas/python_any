@@ -1,8 +1,9 @@
 from io import BytesIO
 
 from flask import Flask, render_template, request, redirect, url_for, send_from_directory, jsonify, send_file, session
+from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_required, login_user, logout_user, current_user
+from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -10,6 +11,10 @@ from PIL import Image
 import io
 import os
 import uuid
+from functools import wraps
+import functools
+
+
 
 
 
@@ -37,21 +42,48 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["SQLALCHEMY_DATABASE_URI"] = DB_URI
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = SECRET_KEY
+app.config["SESSION_PERMANENT"] = False
+app.config['SESSION_TYPE'] = 'filesystem'
+Session(app)
 # app.secret_key = SECRET_KEY  # linea para testear multiple usuarios
 db = SQLAlchemy(app)
-login_manager = LoginManager()
-login_manager.init_app(app)
+# login_manager = LoginManager()
+# login_manager.init_app(app)
+
+
+@app.context_processor
+def make_context_current_user():
+    current_user = None
+    if 'current_user' in session:
+        current_user = session['current_user']
+    return dict(current_user=current_user)
+
+
+def current_user():
+    user_id = session.get("user_id")
+    if user_id is not None:
+        return User.query.get(user_id)
+    return None
+
+def login_required(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if not current_user():
+            return redirect(url_for("login"))
+        return func(*args, **kwargs)
+    return wrapper
+
 
 
 
 
 #the following lines help with the redirection to the login page in case the user is not logged in
-login_manager.login_view = "login"
+# login_manager.login_view = "login"
 
 
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
+# @login_manager.user_loader
+# def load_user(user_id):
+#     return User.query.get(int(user_id))
 
 # the next line helps with the RuntimeError: Working Outside of Application Context
 app.app_context().push()
@@ -109,9 +141,15 @@ class PostFile(db.Model):
 
 @app.route('/')
 def index():
-    posts = Post.query.filter_by(is_published=True).all()
-    post_files = PostFile.query.all()
-    return render_template("index.html", posts=posts, post_files=post_files)
+    user_id = session.get("user_id")
+    if user_id:
+        user = User.query.get(user_id)
+        posts = Post.query.filter_by(is_published=True).all()
+        post_files = PostFile.query.all()
+        return render_template("index.html", posts=posts, post_files=post_files, current_user=user)
+    else:
+        return redirect("/login")
+    
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -128,26 +166,28 @@ def register():
             user = User(username=username, password=hashed_password)
             db.session.add(user)
             db.session.commit()
-            return redirect('/login')
+            session['username'] = username
+            return redirect('/')
     return render_template('register.html', error_message=error_message)
 
 
 # The following lines are the default login route
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route("/login", methods=["GET", "POST"])
 def login():
     error_message = ""
     if request.method == "POST":
-        username = request.form.get('username')
-        password = request.form.get('password')
+        username = request.form.get("username")
+        password = request.form.get("password")
+        # Aquí debes hacer la verificación del usuario y la contraseña
         user = User.query.filter_by(username=username).first()
-
         if user and check_password_hash(user.password, password):
-            login_user(user)
-            return redirect('/')
+            session["user_id"] = user.id
+            return redirect("/")
         else:
+            # Mensaje de error para el usuario
             error_message = "Usuario o contraseña incorrecta."
-    return render_template('login.html', error_message=error_message)
+    return render_template("login.html", error_message=error_message)
     
     
 
@@ -180,7 +220,7 @@ def login():
 # the following lines are the default logout routes
 @app.route('/logout')
 def logout():
-    logout_user()
+    session.clear()
     return redirect(url_for('index'))
 
 # @app.route('/logout')
@@ -191,9 +231,10 @@ def logout():
 #     return redirect('/')
 
 
-@app.route('/add')
-@login_required   
+@app.route('/add') 
 def add():
+    if "user_id" not in session:
+        return redirect(url_for("login"))
     return render_template("add.html") 
 
 
@@ -210,7 +251,7 @@ def create_post():
         if status == "published":
             is_published = True
         files = request.files.getlist("ourfile[]")
-        post = Post(title=title, text=text, author=current_user, is_published=is_published)
+        post = Post(title=title, text=text, author=current_user(), is_published=is_published)
         db.session.add(post)
         db.session.flush()  # flush to get the post's ID
         if files and files[0].filename != '':
@@ -266,7 +307,7 @@ def drafts():
 @app.route('/post_action/<int:post_id>', methods=['POST'])
 @login_required
 def post_action(post_id):
-    post = Post.query.filter_by(id=post_id, user_id=current_user.id).first()
+    post = Post.query.filter_by(id=post_id, user_id=current_user().id).first()
     files = request.files.getlist("ourfile[]")
     error_message = ""
     if post:
@@ -342,7 +383,7 @@ def post_action(post_id):
 @app.route('/all_posts')
 @login_required
 def all_posts():
-    posts = Post.query.filter_by(user_id=current_user.id).all()
+    posts = Post.query.filter_by(user_id=current_user().id).all()
     post_files = PostFile.query.all()
     return render_template("all_posts.html", posts=posts, post_files=post_files)
 
@@ -351,18 +392,18 @@ def all_posts():
 @app.route('/posts', methods=['GET'])
 def posts():
   status = request.args.get('status')
-  posts = Post.query.filter_by(user_id=current_user.id).all()
+  posts = Post.query.filter_by(user_id=current_user().id).all()
   if status == 'published':
-    posts = Post.query.filter_by(user_id=current_user.id, is_published=True).all()
+    posts = Post.query.filter_by(user_id=current_user().id, is_published=True).all()
     post_files = PostFile.query.all()
   elif status == 'archived':
-    posts = Post.query.filter_by(user_id=current_user.id, is_deleted=True).all()
+    posts = Post.query.filter_by(user_id=current_user().id, is_deleted=True).all()
     post_files = PostFile.query.all()
   elif status == 'draft':
-    posts = Post.query.filter_by(user_id=current_user.id, is_published=False, is_deleted=False).all()
+    posts = Post.query.filter_by(user_id=current_user().id, is_published=False, is_deleted=False).all()
     post_files = PostFile.query.all()
   else:
-    posts = Post.query.filter_by(user_id=current_user.id).all()
+    posts = Post.query.filter_by(user_id=current_user().id).all()
     post_files = PostFile.query.all()
   return render_template('all_posts.html', posts=posts, post_files=post_files)
 
